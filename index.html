@@ -153,24 +153,29 @@
 
     <div class="callouts">
         <div class="callout npv">
-            <div class="callout-title">NPV of Repayments (Baseline)</div>
+            <div class="callout-title">NPV — Baseline</div>
             <div class="callout-value" id="opNpvBase">£-</div>
-            <div class="callout-sub" id="opNpvBaseSub">No overpayments</div>
+            <div class="callout-sub" id="opNpvBaseSub">Full salary, no sacrifice, no overpayments</div>
         </div>
         <div class="callout npv">
-            <div class="callout-title">NPV of Repayments (With Overpayments)</div>
+            <div class="callout-title">NPV — Sacrifice Only</div>
+            <div class="callout-value" id="opNpvSac">£-</div>
+            <div class="callout-sub" id="opNpvSacSub">Sacrifice applied, no overpayments</div>
+        </div>
+        <div class="callout npv">
+            <div class="callout-title">NPV — Sacrifice + Overpayments</div>
             <div class="callout-value" id="opNpvOp">£-</div>
-            <div class="callout-sub" id="opNpvOpSub">Including sacrifice + overpayments</div>
+            <div class="callout-sub" id="opNpvOpSub">Sacrifice + monthly + lump sum</div>
         </div>
         <div class="callout saving">
-            <div class="callout-title">NPV Saving</div>
+            <div class="callout-title">NPV Saving vs Baseline</div>
             <div class="callout-value" id="opNpvSaving">£-</div>
-            <div class="callout-sub" id="opNpvSavingSub">Positive = overpaying is worth it at this discount rate</div>
+            <div class="callout-sub" id="opNpvSavingSub">Positive = full scenario beats doing nothing</div>
         </div>
         <div class="callout inflection">
             <div class="callout-title">Lump Sum Inflection</div>
             <div class="callout-value" id="opInflection">£-</div>
-            <div class="callout-sub" id="opInflectionSub">Lump sum at which NPV saving = £0</div>
+            <div class="callout-sub" id="opInflectionSub">Max lump sum where repaying beats investing</div>
         </div>
     </div>
 
@@ -249,6 +254,7 @@
             return cashflows.reduce((acc, cf, i) => acc + cf / Math.pow(1 + monthlyRate, i + 1), 0);
         }
 
+        // baseNpv is always the full-salary no-modification NPV
         function npvSavingForLump(lump, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv) {
             const op = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lump);
             const opNpvTotal = lump + npv(op.cashflows, discountRate);
@@ -366,52 +372,69 @@
             const effectiveSalary = Math.max(0, salary - sacrifice);
             document.getElementById('opEffectiveSalary').textContent = `£${Math.round(effectiveSalary).toLocaleString()}`;
 
-            const base = simulateMonthly(balance, salary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0, 0);
-            const op = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
-            const npvBase = npv(base.cashflows, discountRate);
-            const npvOp = lumpSum + npv(op.cashflows, discountRate);
-            const npvSaving = npvBase - npvOp;
+            // Three scenarios — baseline is always full salary, no modifications
+            const base    = simulateMonthly(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const sacOnly = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const full    = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
+
+            const npvBase    = npv(base.cashflows,    discountRate);
+            const npvSacOnly = npv(sacOnly.cashflows, discountRate);
+            const npvFull    = lumpSum + npv(full.cashflows, discountRate);
+            const npvSaving  = npvBase - npvFull;
+
             const fmt = (v) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(v);
 
-            document.getElementById('opNpvBase').textContent = fmt(npvBase);
+            document.getElementById('opNpvBase').textContent    = fmt(npvBase);
             document.getElementById('opNpvBaseSub').textContent = `Nominal: ${fmt(base.totalPaid)} over ${base.years.toFixed(1)} yrs`;
-            document.getElementById('opNpvOp').textContent = fmt(npvOp);
-            document.getElementById('opNpvOpSub').textContent = `Nominal: ${fmt(op.totalPaid)} over ${op.years.toFixed(1)} yrs`;
-            document.getElementById('opNpvSaving').textContent = fmt(npvSaving);
-            document.getElementById('opNpvSavingSub').textContent = npvSaving > 0
-                ? `Overpaying saves ${fmt(npvSaving)} in today’s money vs investing at ${(discountRate*100).toFixed(1)}%`
-                : `Investing at ${(discountRate*100).toFixed(1)}% beats overpaying by ${fmt(Math.abs(npvSaving))}`;
 
+            document.getElementById('opNpvSac').textContent    = fmt(npvSacOnly);
+            document.getElementById('opNpvSacSub').textContent = `Nominal: ${fmt(sacOnly.totalPaid)} over ${sacOnly.years.toFixed(1)} yrs`;
+
+            document.getElementById('opNpvOp').textContent    = fmt(npvFull);
+            document.getElementById('opNpvOpSub').textContent = `Nominal: ${fmt(full.totalPaid)} over ${full.years.toFixed(1)} yrs`;
+
+            document.getElementById('opNpvSaving').textContent    = fmt(npvSaving);
+            document.getElementById('opNpvSavingSub').textContent = npvSaving > 0
+                ? `Full scenario saves ${fmt(npvSaving)} in today’s money vs doing nothing`
+                : `Doing nothing + investing at ${(discountRate*100).toFixed(1)}% beats full scenario by ${fmt(Math.abs(npvSaving))}`;
+
+            // Inflection uses baseline NPV (full salary, no mods) as the reference
             const inflection = findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, npvBase);
-            const inflEl = document.getElementById('opInflection');
+            const inflEl  = document.getElementById('opInflection');
             const inflSub = document.getElementById('opInflectionSub');
             if (inflection.verdict === 'found') {
-                inflEl.textContent = fmt(inflection.lump);
-                inflSub.textContent = `Below this, invest at ${(discountRate*100).toFixed(1)}% instead. Above this, repay the loan.`;
+                inflEl.textContent  = fmt(inflection.lump);
+                inflSub.textContent = `Repay up to this amount — beyond it, invest at ${(discountRate*100).toFixed(1)}% instead.`;
             } else if (inflection.verdict === 'always') {
-                inflEl.textContent = 'Full balance';
-                inflSub.textContent = `Repaying always beats investing at ${(discountRate*100).toFixed(1)}% — pay off entirely.`;
+                inflEl.textContent  = 'Full balance';
+                inflSub.textContent = `Repaying always beats investing at ${(discountRate*100).toFixed(1)}% — clear it entirely.`;
             } else {
-                inflEl.textContent = 'N/A';
+                inflEl.textContent  = 'N/A';
                 inflSub.textContent = `Investing at ${(discountRate*100).toFixed(1)}% always beats any lump sum repayment.`;
             }
 
-            const baseBalances = buildBalanceCurve(balance, salary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0, 0);
-            const opBalances = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
-            const maxLen = Math.max(baseBalances.length, opBalances.length);
+            // Build balance curves for all three scenarios
+            const baseBalances   = buildBalanceCurve(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const sacBalances    = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const fullBalances   = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
+            const maxLen = Math.max(baseBalances.length, sacBalances.length, fullBalances.length);
             const labels = Array.from({length: maxLen}, (_, i) => (i % 12 === 0) ? `Yr ${Math.floor(i/12)}` : '');
 
             const ctxOP = document.getElementById('chartOP').getContext('2d');
             if (!chartOP) {
                 chartOP = new Chart(ctxOP, { type: 'line', data: { labels, datasets: [
-                    { label: 'Balance (Baseline)', data: baseBalances, borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
-                    { label: 'Balance (With Overpayments)', data: opBalances, borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                    { label: 'Baseline',                    data: baseBalances,  borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Salary Sacrifice',            data: sacBalances,   borderColor: '#FFC107', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2, borderDash: [5,3] },
+                    { label: 'Sacrifice + Overpayments',    data: fullBalances,  borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
                 ]}, options: { responsive: true, maintainAspectRatio: false,
-                    scales: { x: { title: { display: true, text: 'Month' }, ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: 'Outstanding Balance (£)' }, beginAtZero: true } },
+                    scales: { x: { title: { display: true, text: 'Year' }, ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: 'Outstanding Balance (£)' }, beginAtZero: true } },
                     plugins: { tooltip: { callbacks: { label(context) { return context.dataset.label + ': ' + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y); } } } },
                     interaction: { mode: 'index', intersect: false }, animation: false } });
             } else {
-                chartOP.data.labels = labels; chartOP.data.datasets[0].data = baseBalances; chartOP.data.datasets[1].data = opBalances;
+                chartOP.data.labels = labels;
+                chartOP.data.datasets[0].data = baseBalances;
+                chartOP.data.datasets[1].data = sacBalances;
+                chartOP.data.datasets[2].data = fullBalances;
                 chartOP.update('none');
             }
         }
