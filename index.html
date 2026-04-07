@@ -11,7 +11,10 @@
         .inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .inputs label { display: flex; flex-direction: column; font-size: 0.9em; font-weight: bold; }
         input[type="number"], input[type="text"] { padding: 8px; font-size: 1em; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
-        
+        input[type="number"]:disabled { background: #e9ecef; color: #6c757d; cursor: not-allowed; }
+        .years-remaining { font-size: 0.85em; color: #6c757d; margin-top: 4px; }
+        .years-remaining span { font-weight: bold; color: #495057; }
+
         .sliders-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
         .slider-control { background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #e9ecef; }
         .slider-wrapper { position: relative; padding-top: 35px; margin: 5px 0; }
@@ -50,7 +53,11 @@
         <label>Low Thresh (£) <input type="number" id="lowThresh" value="29385" onchange="updateStaticParams()"></label>
         <label>High Thresh (£) <input type="number" id="highThresh" value="52885" onchange="updateStaticParams()"></label>
         <label>Total Rate Cap (%) <input type="number" id="cap" value="6" step="0.1" onchange="updateStaticParams()"></label>
-        <label>Max Years <input type="number" id="maxYears" value="30" onchange="updateStaticParams()"></label>
+        <label>
+            Loan Start Year
+            <input type="number" id="startYear" value="2020" min="2012" max="2026" onchange="updateStaticParams()">
+            <span class="years-remaining">Years remaining: <span id="yearsRemainingDisplay">?</span></span>
+        </label>
         <label style="grid-column: span 2;">Test Salaries (£, CSV) 
             <input type="text" id="testSalaries" value="30000, 45000, 60000, 80000" onchange="requestRender()">
         </label>
@@ -94,7 +101,7 @@
         <div class="callout break-even" id="cbCallout">
             <div class="callout-title">Break-even Salary</div>
             <div class="callout-value" id="cbValue">£0</div>
-            <div class="callout-sub" id="cbSub">Pays off before 30 years</div>
+            <div class="callout-sub" id="cbSub">Pays off before write-off</div>
         </div>
         <div class="callout max-paid" id="cmCallout">
             <div class="callout-title">Maximum Repaid</div>
@@ -130,7 +137,17 @@
         
         let cachedYAxisMax = 10000;
         let cachedMaxSalaryPlot = 200000;
+        let cachedYearsRemaining = 30;
         let renderFrameId = null;
+
+        const STATUTORY_TERM = 30;
+        const CURRENT_YEAR = new Date().getFullYear();
+
+        function getYearsRemaining() {
+            const startYear = parseInt(document.getElementById('startYear').value) || CURRENT_YEAR;
+            const elapsed = CURRENT_YEAR - startYear;
+            return Math.max(1, Math.min(STATUTORY_TERM, STATUTORY_TERM - elapsed));
+        }
 
         function updateSliders() {
             const rpiSlider = document.getElementById('rpiSlider');
@@ -220,7 +237,9 @@
             const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
             const cap = parseFloat(document.getElementById('cap').value) || 6;
-            const maxYears = parseInt(document.getElementById('maxYears').value) || 30;
+
+            cachedYearsRemaining = getYearsRemaining();
+            document.getElementById('yearsRemainingDisplay').textContent = cachedYearsRemaining;
 
             let calculatedMax = Math.ceil(((balance / 3) / 0.09 + lowThresh) / 10000) * 10000;
             cachedMaxSalaryPlot = Math.max(80000, Math.min(600000, calculatedMax)); 
@@ -232,7 +251,7 @@
             let globalMaxPaid = 0;
             for (let g of [0, maxSliderGrowth]) {
                 for (let i = 0; i <= cachedMaxSalaryPlot; i += 5000) { 
-                    const res = simulateMonthly(balance, i, lowThresh, highThresh, maxSliderRpi, g, minSliderThresh, cap, maxYears);
+                    const res = simulateMonthly(balance, i, lowThresh, highThresh, maxSliderRpi, g, minSliderThresh, cap, cachedYearsRemaining);
                     if (res.totalPaid > globalMaxPaid) globalMaxPaid = res.totalPaid;
                 }
             }
@@ -252,7 +271,7 @@
             const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
             const cap = parseFloat(document.getElementById('cap').value) || 6;
-            const maxYears = parseInt(document.getElementById('maxYears').value) || 30;
+            const maxYears = cachedYearsRemaining;
             
             const rpi = currentRPI;
             const growth = currentGrowth;
@@ -315,7 +334,7 @@
 
             const isSamePoint = breakEvenSal !== null && Math.abs(maxPaidSal - breakEvenSal) <= stepSize * 2;
             document.getElementById('cbValue').textContent = breakEvenSal !== null ? `£${breakEvenSal.toLocaleString()}` : 'N/A';
-            document.getElementById('cbSub').textContent = breakEvenSal !== null ? `Total Paid: £${Math.round(breakEvenPaid).toLocaleString()}` : `Does not break even ≤ £${cachedMaxSalaryPlot.toLocaleString()}`;
+            document.getElementById('cbSub').textContent = breakEvenSal !== null ? `Total Paid: £${Math.round(breakEvenPaid).toLocaleString()}` : `Does not break even within ${maxYears} yrs`;
             
             const maxPaidCallout = document.getElementById('cmCallout');
             if (isSamePoint) {
@@ -360,7 +379,7 @@
                         scales: {
                             x: { title: { display: true, text: 'Initial Annual Salary (£)' }, ticks: { maxTicksLimit: 15 } },
                             'y-paid': { type: 'linear', position: 'left', title: { display: true, text: 'Total Paid (£)' }, beginAtZero: true, max: cachedYAxisMax },
-                            'y-term': { type: 'linear', position: 'right', title: { display: true, text: 'Years' }, beginAtZero: true, max: maxYears, grid: { drawOnChartArea: false } }
+                            'y-term': { type: 'linear', position: 'right', title: { display: true, text: 'Years Remaining' }, beginAtZero: true, max: maxYears, grid: { drawOnChartArea: false } }
                         },
                         plugins: { 
                             annotation: { annotations },
@@ -385,6 +404,7 @@
                 chart.data.datasets[0].data = totalPaid;
                 chart.data.datasets[1].data = years;
                 chart.options.scales['y-paid'].max = cachedYAxisMax;
+                chart.options.scales['y-term'].max = maxYears;
                 chart.options.plugins.annotation.annotations = annotations;
                 chart.update('none');
             }
