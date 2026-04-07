@@ -31,8 +31,14 @@
         .callout.npv { border-color: #fd7e14; }
         .callout.saving { border-color: #20c997; }
         .callout.inflection { border-color: #dc3545; }
+        .callout.verdict-good { border-color: #198754; background: #f0faf4; }
+        .callout.verdict-bad  { border-color: #dc3545; background: #fff5f5; }
+        .callout.verdict-moot { border-color: #6c757d; background: #f8f9fa; }
         .callout-title { font-size: 0.9em; text-transform: uppercase; color: #666; font-weight: bold; margin-bottom: 5px; }
         .callout-value { font-size: 1.4em; font-weight: bold; margin-bottom: 5px; }
+        .callout-value.good { color: #198754; }
+        .callout-value.bad  { color: #dc3545; }
+        .callout-value.moot { color: #6c757d; }
         .callout-sub { font-size: 0.9em; color: #555; }
         .results-grid { display: grid; grid-template-columns: 1fr 450px; gap: 20px; align-items: start; }
         @media (max-width: 900px) { .results-grid { grid-template-columns: 1fr; } }
@@ -186,6 +192,13 @@
         </div>
     </div>
 
+    <!-- Overpayment verdict — full-width, prominent -->
+    <div id="opVerdictCallout" class="callout verdict-moot" style="margin-bottom: 20px;">
+        <div class="callout-title">Overpayment Verdict at This Salary</div>
+        <div class="callout-value moot" id="opVerdictValue">—</div>
+        <div class="callout-sub" id="opVerdictSub"></div>
+    </div>
+
     <div class="chart-container" style="margin-bottom: 20px;">
         <canvas id="chartOP"></canvas>
     </div>
@@ -261,7 +274,6 @@
             return cashflows.reduce((acc, cf, i) => acc + cf / Math.pow(1 + monthlyRate, i + 1), 0);
         }
 
-        // Bisects relative to sacOnlyNpv — sacrifice is a fixed decision, we only evaluate marginal value of lump sum on top
         function npvSavingForLump(lump, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv) {
             const op = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lump);
             const opNpvTotal = lump + npv(op.cashflows, discountRate);
@@ -269,15 +281,14 @@
         }
 
         function findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv) {
-            const savingAt0 = npvSavingForLump(0, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
-            const savingAtMax = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
+            const savingAt0    = npvSavingForLump(0,       balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
+            const savingAtMax  = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
             if (savingAtMax >= 0) return { lump: balance, verdict: 'always' };
-            if (savingAt0 <= 0) return { lump: null, verdict: 'never' };
+            if (savingAt0  <= 0) return { lump: null,    verdict: 'never'  };
             let lo = 0, hi = balance;
             for (let i = 0; i < 40; i++) {
                 const mid = (lo + hi) / 2;
-                const s = npvSavingForLump(mid, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
-                if (s > 0) lo = mid; else hi = mid;
+                npvSavingForLump(mid, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv) > 0 ? lo = mid : hi = mid;
             }
             return { lump: (lo + hi) / 2, verdict: 'found' };
         }
@@ -291,7 +302,7 @@
             document.getElementById('yearsRemainingDisplay').textContent = cachedYearsRemaining;
             let calculatedMax = Math.ceil(((balance / 3) / 0.09 + lowThresh) / 10000) * 10000;
             cachedMaxSalaryPlot = Math.max(80000, Math.min(600000, calculatedMax));
-            const maxSliderRpi = parseFloat(document.getElementById('rpiSlider').max) / 100;
+            const maxSliderRpi    = parseFloat(document.getElementById('rpiSlider').max) / 100;
             const maxSliderGrowth = parseFloat(document.getElementById('growthSlider').max) / 100;
             const minSliderThresh = parseFloat(document.getElementById('threshGrowthSlider').min) / 100;
             let globalMaxPaid = 0;
@@ -311,11 +322,11 @@
 
         function calculate() {
             updateCapIndicator();
-            const balance = parseFloat(document.getElementById('balance').value) || 0;
-            const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
+            const balance    = parseFloat(document.getElementById('balance').value)    || 0;
+            const lowThresh  = parseFloat(document.getElementById('lowThresh').value)  || 29385;
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
-            const cap = parseFloat(document.getElementById('cap').value) || 6;
-            const maxYears = cachedYearsRemaining;
+            const cap        = parseFloat(document.getElementById('cap').value)        || 6;
+            const maxYears   = cachedYearsRemaining;
             const rpi = currentRPI, growth = currentGrowth, threshGrowth = currentThreshGrowth;
             const stepSize = Math.max(250, Math.floor(cachedMaxSalaryPlot / 300));
             const salaries = Array.from({length: Math.floor(cachedMaxSalaryPlot / stepSize) + 1}, (_, i) => i * stepSize);
@@ -329,8 +340,8 @@
             }
             const testSals = document.getElementById('testSalaries').value.split(',').map(s => parseFloat(s.trim())).filter(s => !isNaN(s));
             let tableEntries = testSals.map(sal => ({ label: `£${sal.toLocaleString()}`, val: sal, class: '' }));
-            tableEntries.push({ label: `£${lowThresh.toLocaleString()} (Low Thresh)`, val: lowThresh, class: 'row-thresh' });
-            tableEntries.push({ label: `£${highThresh.toLocaleString()} (High Thresh)`, val: highThresh, class: 'row-thresh' });
+            tableEntries.push({ label: `£${lowThresh.toLocaleString()} (Low Thresh)`,   val: lowThresh,  class: 'row-thresh'    });
+            tableEntries.push({ label: `£${highThresh.toLocaleString()} (High Thresh)`, val: highThresh, class: 'row-thresh'    });
             if (breakEvenSal !== null) tableEntries.push({ label: `£${breakEvenSal.toLocaleString()} (Break-even)`, val: breakEvenSal, class: 'row-breakeven' });
             tableEntries.sort((a, b) => a.val - b.val);
             document.getElementById('tableBody').innerHTML = tableEntries.map(entry => {
@@ -340,7 +351,7 @@
             }).join('');
             const isSamePoint = breakEvenSal !== null && Math.abs(maxPaidSal - breakEvenSal) <= stepSize * 2;
             document.getElementById('cbValue').textContent = breakEvenSal !== null ? `£${breakEvenSal.toLocaleString()}` : 'N/A';
-            document.getElementById('cbSub').textContent = breakEvenSal !== null ? `Total Paid: £${Math.round(breakEvenPaid).toLocaleString()}` : `Does not break even within ${maxYears} yrs`;
+            document.getElementById('cbSub').textContent   = breakEvenSal !== null ? `Total Paid: £${Math.round(breakEvenPaid).toLocaleString()}` : `Does not break even within ${maxYears} yrs`;
             const maxPaidCallout = document.getElementById('cmCallout');
             if (isSamePoint) { maxPaidCallout.style.display = 'none'; }
             else { maxPaidCallout.style.display = 'block'; document.getElementById('cmValue').textContent = `£${Math.round(maxPaidVal).toLocaleString()}`; document.getElementById('cmSub').textContent = `At starting salary £${maxPaidSal.toLocaleString()}`; }
@@ -351,8 +362,8 @@
             const ctx = document.getElementById('chart').getContext('2d');
             if (!chart) {
                 chart = new Chart(ctx, { type: 'line', data: { labels: chartLabels, datasets: [
-                    { label: 'Total Paid', data: totalPaid, borderColor: '#36A2EB', backgroundColor: 'rgba(54,162,235,0.1)', yAxisID: 'y-paid', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
-                    { label: 'Years to Repay', data: years, borderColor: '#FF6384', borderDash: [5,5], yAxisID: 'y-term', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                    { label: 'Total Paid',    data: totalPaid, borderColor: '#36A2EB', backgroundColor: 'rgba(54,162,235,0.1)', yAxisID: 'y-paid', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Years to Repay', data: years,   borderColor: '#FF6384', borderDash: [5,5], yAxisID: 'y-term', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
                 ]}, options: { responsive: true, maintainAspectRatio: false,
                     scales: { x: { title: { display: true, text: 'Initial Annual Salary (£)' }, ticks: { maxTicksLimit: 15 } }, 'y-paid': { type: 'linear', position: 'left', title: { display: true, text: 'Total Paid (£)' }, beginAtZero: true, max: cachedYAxisMax }, 'y-term': { type: 'linear', position: 'right', title: { display: true, text: 'Years Remaining' }, beginAtZero: true, max: maxYears, grid: { drawOnChartArea: false } } },
                     plugins: { annotation: { annotations }, tooltip: { callbacks: { label(context) { let l = context.dataset.label + ': '; return context.datasetIndex === 0 ? l + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y) : l + context.parsed.y.toFixed(1) + ' yrs'; } } } },
@@ -364,17 +375,26 @@
             }
         }
 
+        function setVerdict(tone, value, sub) {
+            const el = document.getElementById('opVerdictCallout');
+            el.className = `callout verdict-${tone}`;
+            const valEl = document.getElementById('opVerdictValue');
+            valEl.className = tone;
+            valEl.textContent = value;
+            document.getElementById('opVerdictSub').textContent = sub;
+        }
+
         function calculateOP() {
-            const balance = parseFloat(document.getElementById('balance').value) || 0;
-            const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
+            const balance    = parseFloat(document.getElementById('balance').value)    || 0;
+            const lowThresh  = parseFloat(document.getElementById('lowThresh').value)  || 29385;
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
-            const cap = parseFloat(document.getElementById('cap').value) || 6;
-            const maxYears = cachedYearsRemaining;
+            const cap        = parseFloat(document.getElementById('cap').value)        || 6;
+            const maxYears   = cachedYearsRemaining;
             const rpi = currentRPI, growth = currentGrowth, threshGrowth = currentThreshGrowth;
-            const salary = parseFloat(document.getElementById('opSalary').value) || 0;
-            const sacrifice = parseFloat(document.getElementById('opSacrifice').value) || 0;
-            const extraMonthly = parseFloat(document.getElementById('opMonthly').value) || 0;
-            const lumpSum = parseFloat(document.getElementById('opLump').value) || 0;
+            const salary       = parseFloat(document.getElementById('opSalary').value)    || 0;
+            const sacrifice    = parseFloat(document.getElementById('opSacrifice').value) || 0;
+            const extraMonthly = parseFloat(document.getElementById('opMonthly').value)   || 0;
+            const lumpSum      = parseFloat(document.getElementById('opLump').value)      || 0;
             const discountRate = (parseFloat(document.getElementById('opDiscount').value) || 0) / 100;
             const effectiveSalary = Math.max(0, salary - sacrifice);
             document.getElementById('opEffectiveSalary').textContent = `£${Math.round(effectiveSalary).toLocaleString()}`;
@@ -390,40 +410,41 @@
 
             const fmt = (v) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(v);
 
-            // Show write-off warning if all three scenarios end with outstanding balance
             const allWrittenOff = base.writtenOff > 0 && sacOnly.writtenOff > 0 && full.writtenOff > 0;
             document.getElementById('writeoffWarning').style.display = allWrittenOff ? 'block' : 'none';
 
             document.getElementById('opNpvBase').textContent    = fmt(npvBase);
             document.getElementById('opNpvBaseSub').textContent = `Nominal: ${fmt(base.totalPaid)} over ${base.years.toFixed(1)} yrs${base.writtenOff > 0 ? ` — ${fmt(base.writtenOff)} written off` : ''}`;
-
-            document.getElementById('opNpvSac').textContent    = fmt(npvSacOnly);
-            document.getElementById('opNpvSacSub').textContent = `Nominal: ${fmt(sacOnly.totalPaid)} over ${sacOnly.years.toFixed(1)} yrs${sacOnly.writtenOff > 0 ? ` — ${fmt(sacOnly.writtenOff)} written off` : ''}`;
-
-            document.getElementById('opNpvOp').textContent    = fmt(npvFull);
-            document.getElementById('opNpvOpSub').textContent = `Nominal: ${fmt(full.totalPaid)} over ${full.years.toFixed(1)} yrs${full.writtenOff > 0 ? ` — ${fmt(full.writtenOff)} written off` : ''}`;
-
+            document.getElementById('opNpvSac').textContent     = fmt(npvSacOnly);
+            document.getElementById('opNpvSacSub').textContent  = `Nominal: ${fmt(sacOnly.totalPaid)} over ${sacOnly.years.toFixed(1)} yrs${sacOnly.writtenOff > 0 ? ` — ${fmt(sacOnly.writtenOff)} written off` : ''}`;
+            document.getElementById('opNpvOp').textContent      = fmt(npvFull);
+            document.getElementById('opNpvOpSub').textContent   = `Nominal: ${fmt(full.totalPaid)} over ${full.years.toFixed(1)} yrs${full.writtenOff > 0 ? ` — ${fmt(full.writtenOff)} written off` : ''}`;
             document.getElementById('opNpvSaving').textContent    = fmt(npvSaving);
             document.getElementById('opNpvSavingSub').textContent = npvSaving > 0
-                ? `Full scenario saves ${fmt(npvSaving)} in today’s money vs doing nothing`
+                ? `Full scenario saves ${fmt(npvSaving)} in today's money vs doing nothing`
                 : `Doing nothing + investing at ${(discountRate*100).toFixed(1)}% beats full scenario by ${fmt(Math.abs(npvSaving))}`;
 
-            // Inflection: bisect relative to sacOnly NPV — sacrifice is fixed, we evaluate marginal value of lump sum only
+            // Inflection bisects against sacOnly — marginal value of lump sum given sacrifice is fixed
             const inflection = findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, npvSacOnly);
             const inflEl  = document.getElementById('opInflection');
             const inflSub = document.getElementById('opInflectionSub');
+
             if (allWrittenOff) {
                 inflEl.textContent  = 'N/A';
                 inflSub.textContent = 'Loan written off in all scenarios — lump sum reduces written-off balance only, not cash outflow.';
-            } else if (inflection.verdict === 'found') {
-                inflEl.textContent  = fmt(inflection.lump);
-                inflSub.textContent = `Repay up to this amount — beyond it, invest at ${(discountRate*100).toFixed(1)}% instead.`;
+                setVerdict('moot', 'Do not overpay', 'Loan written off regardless of scenario. Any overpayment or lump sum only reduces the written-off balance — it does not reduce your actual cash outflow.');
+            } else if (inflection.verdict === 'never') {
+                inflEl.textContent  = 'N/A';
+                inflSub.textContent = `Investing at ${(discountRate*100).toFixed(1)}% always beats any lump sum repayment.`;
+                setVerdict('bad', 'Do not overpay', `At this salary, investing at ${(discountRate*100).toFixed(1)}% beats any lump sum or overpayment. The loan interest rate is lower than your discount rate and the loan will be written off — put the cash in the market instead.`);
             } else if (inflection.verdict === 'always') {
                 inflEl.textContent  = 'Full balance';
                 inflSub.textContent = `Repaying always beats investing at ${(discountRate*100).toFixed(1)}% — clear it entirely.`;
+                setVerdict('good', 'Overpay — clear the loan', `At this salary the loan will be repaid in full and every pound of overpayment saves more than it would earn at ${(discountRate*100).toFixed(1)}%. Pay it off entirely.`);
             } else {
-                inflEl.textContent  = 'N/A';
-                inflSub.textContent = `Investing at ${(discountRate*100).toFixed(1)}% always beats any lump sum repayment.`;
+                inflEl.textContent  = fmt(inflection.lump);
+                inflSub.textContent = `Repay up to this amount — beyond it, invest at ${(discountRate*100).toFixed(1)}% instead.`;
+                setVerdict('good', `Overpay up to ${fmt(inflection.lump)}`, `At this salary, lump sum repayments up to ${fmt(inflection.lump)} beat investing at ${(discountRate*100).toFixed(1)}%. Beyond that threshold, invest the remainder — the marginal return on further repayment falls below your discount rate.`);
             }
 
             const baseBalances = buildBalanceCurve(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
@@ -457,8 +478,8 @@
             const balances = [currentBalance];
             for (let y = 0; y < maxYears; y++) {
                 if (currentBalance <= 0) break;
-                const annualRate = getInterestRate(rpi, sal, lt, ht, cap);
-                const monthlyRate = annualRate / 12;
+                const annualRate   = getInterestRate(rpi, sal, lt, ht, cap);
+                const monthlyRate  = annualRate / 12;
                 const monthlyRepayment = Math.max(0, (sal - lt) * 0.09) / 12;
                 for (let m = 0; m < 12; m++) {
                     if (currentBalance <= 0) break;
