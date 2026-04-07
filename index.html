@@ -50,6 +50,8 @@
         .op-salary-label { font-size: 0.85em; color: #6c757d; margin-top: 4px; }
         .op-salary-label span { font-weight: bold; color: #495057; }
         .section-divider { border: none; border-top: 1px solid #e9ecef; margin: 30px 0; }
+        .writeoff-warning { display: none; background: #fff3cd; border: 1px solid #ffc107; border-left: 5px solid #ffc107; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.9em; color: #856404; }
+        .writeoff-warning strong { display: block; margin-bottom: 4px; }
     </style>
 </head>
 <body>
@@ -151,6 +153,11 @@
         </label>
     </div>
 
+    <div id="writeoffWarning" class="writeoff-warning">
+        <strong>⚠️ Loan written off in all scenarios</strong>
+        All three projections end at write-off, meaning any lump sum only reduces the written-off balance — you never repay it. The inflection point is N/A and overpayments are unlikely to be worthwhile unless they clear the loan entirely.
+    </div>
+
     <div class="callouts">
         <div class="callout npv">
             <div class="callout-title">NPV — Baseline</div>
@@ -175,7 +182,7 @@
         <div class="callout inflection">
             <div class="callout-title">Lump Sum Inflection</div>
             <div class="callout-value" id="opInflection">£-</div>
-            <div class="callout-sub" id="opInflectionSub">Max lump sum where repaying beats investing</div>
+            <div class="callout-sub" id="opInflectionSub">Max lump sum where repaying beats investing at your discount rate, given current sacrifice</div>
         </div>
     </div>
 
@@ -254,22 +261,22 @@
             return cashflows.reduce((acc, cf, i) => acc + cf / Math.pow(1 + monthlyRate, i + 1), 0);
         }
 
-        // baseNpv is always the full-salary no-modification NPV
-        function npvSavingForLump(lump, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv) {
+        // Bisects relative to sacOnlyNpv — sacrifice is a fixed decision, we only evaluate marginal value of lump sum on top
+        function npvSavingForLump(lump, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv) {
             const op = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lump);
             const opNpvTotal = lump + npv(op.cashflows, discountRate);
-            return baseNpv - opNpvTotal;
+            return sacOnlyNpv - opNpvTotal;
         }
 
-        function findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv) {
-            const savingAt0 = npvSavingForLump(0, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv);
-            const savingAtMax = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv);
+        function findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv) {
+            const savingAt0 = npvSavingForLump(0, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
+            const savingAtMax = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
             if (savingAtMax >= 0) return { lump: balance, verdict: 'always' };
             if (savingAt0 <= 0) return { lump: null, verdict: 'never' };
             let lo = 0, hi = balance;
             for (let i = 0; i < 40; i++) {
                 const mid = (lo + hi) / 2;
-                const s = npvSavingForLump(mid, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv);
+                const s = npvSavingForLump(mid, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
                 if (s > 0) lo = mid; else hi = mid;
             }
             return { lump: (lo + hi) / 2, verdict: 'found' };
@@ -372,7 +379,6 @@
             const effectiveSalary = Math.max(0, salary - sacrifice);
             document.getElementById('opEffectiveSalary').textContent = `£${Math.round(effectiveSalary).toLocaleString()}`;
 
-            // Three scenarios — baseline is always full salary, no modifications
             const base    = simulateMonthly(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
             const sacOnly = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
             const full    = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
@@ -384,25 +390,32 @@
 
             const fmt = (v) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(v);
 
+            // Show write-off warning if all three scenarios end with outstanding balance
+            const allWrittenOff = base.writtenOff > 0 && sacOnly.writtenOff > 0 && full.writtenOff > 0;
+            document.getElementById('writeoffWarning').style.display = allWrittenOff ? 'block' : 'none';
+
             document.getElementById('opNpvBase').textContent    = fmt(npvBase);
-            document.getElementById('opNpvBaseSub').textContent = `Nominal: ${fmt(base.totalPaid)} over ${base.years.toFixed(1)} yrs`;
+            document.getElementById('opNpvBaseSub').textContent = `Nominal: ${fmt(base.totalPaid)} over ${base.years.toFixed(1)} yrs${base.writtenOff > 0 ? ` — ${fmt(base.writtenOff)} written off` : ''}`;
 
             document.getElementById('opNpvSac').textContent    = fmt(npvSacOnly);
-            document.getElementById('opNpvSacSub').textContent = `Nominal: ${fmt(sacOnly.totalPaid)} over ${sacOnly.years.toFixed(1)} yrs`;
+            document.getElementById('opNpvSacSub').textContent = `Nominal: ${fmt(sacOnly.totalPaid)} over ${sacOnly.years.toFixed(1)} yrs${sacOnly.writtenOff > 0 ? ` — ${fmt(sacOnly.writtenOff)} written off` : ''}`;
 
             document.getElementById('opNpvOp').textContent    = fmt(npvFull);
-            document.getElementById('opNpvOpSub').textContent = `Nominal: ${fmt(full.totalPaid)} over ${full.years.toFixed(1)} yrs`;
+            document.getElementById('opNpvOpSub').textContent = `Nominal: ${fmt(full.totalPaid)} over ${full.years.toFixed(1)} yrs${full.writtenOff > 0 ? ` — ${fmt(full.writtenOff)} written off` : ''}`;
 
             document.getElementById('opNpvSaving').textContent    = fmt(npvSaving);
             document.getElementById('opNpvSavingSub').textContent = npvSaving > 0
                 ? `Full scenario saves ${fmt(npvSaving)} in today’s money vs doing nothing`
                 : `Doing nothing + investing at ${(discountRate*100).toFixed(1)}% beats full scenario by ${fmt(Math.abs(npvSaving))}`;
 
-            // Inflection uses baseline NPV (full salary, no mods) as the reference
-            const inflection = findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, npvBase);
+            // Inflection: bisect relative to sacOnly NPV — sacrifice is fixed, we evaluate marginal value of lump sum only
+            const inflection = findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, npvSacOnly);
             const inflEl  = document.getElementById('opInflection');
             const inflSub = document.getElementById('opInflectionSub');
-            if (inflection.verdict === 'found') {
+            if (allWrittenOff) {
+                inflEl.textContent  = 'N/A';
+                inflSub.textContent = 'Loan written off in all scenarios — lump sum reduces written-off balance only, not cash outflow.';
+            } else if (inflection.verdict === 'found') {
                 inflEl.textContent  = fmt(inflection.lump);
                 inflSub.textContent = `Repay up to this amount — beyond it, invest at ${(discountRate*100).toFixed(1)}% instead.`;
             } else if (inflection.verdict === 'always') {
@@ -413,19 +426,18 @@
                 inflSub.textContent = `Investing at ${(discountRate*100).toFixed(1)}% always beats any lump sum repayment.`;
             }
 
-            // Build balance curves for all three scenarios
-            const baseBalances   = buildBalanceCurve(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
-            const sacBalances    = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
-            const fullBalances   = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
+            const baseBalances = buildBalanceCurve(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const sacBalances  = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const fullBalances = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
             const maxLen = Math.max(baseBalances.length, sacBalances.length, fullBalances.length);
             const labels = Array.from({length: maxLen}, (_, i) => (i % 12 === 0) ? `Yr ${Math.floor(i/12)}` : '');
 
             const ctxOP = document.getElementById('chartOP').getContext('2d');
             if (!chartOP) {
                 chartOP = new Chart(ctxOP, { type: 'line', data: { labels, datasets: [
-                    { label: 'Baseline',                    data: baseBalances,  borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
-                    { label: 'Salary Sacrifice',            data: sacBalances,   borderColor: '#FFC107', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2, borderDash: [5,3] },
-                    { label: 'Sacrifice + Overpayments',    data: fullBalances,  borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                    { label: 'Baseline',                 data: baseBalances, borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Salary Sacrifice',         data: sacBalances,  borderColor: '#FFC107', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2, borderDash: [5,3] },
+                    { label: 'Sacrifice + Overpayments', data: fullBalances, borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
                 ]}, options: { responsive: true, maintainAspectRatio: false,
                     scales: { x: { title: { display: true, text: 'Year' }, ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: 'Outstanding Balance (£)' }, beginAtZero: true } },
                     plugins: { tooltip: { callbacks: { label(context) { return context.dataset.label + ': ' + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y); } } } },
