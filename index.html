@@ -192,7 +192,6 @@
         </div>
     </div>
 
-    <!-- Overpayment verdict — full-width, prominent -->
     <div id="opVerdictCallout" class="callout verdict-moot" style="margin-bottom: 20px;">
         <div class="callout-title">Overpayment Verdict at This Salary</div>
         <div class="callout-value moot" id="opVerdictValue">—</div>
@@ -281,8 +280,8 @@
         }
 
         function findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv) {
-            const savingAt0    = npvSavingForLump(0,       balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
-            const savingAtMax  = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
+            const savingAt0   = npvSavingForLump(0,       balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
+            const savingAtMax = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, sacOnlyNpv);
             if (savingAtMax >= 0) return { lump: balance, verdict: 'always' };
             if (savingAt0  <= 0) return { lump: null,    verdict: 'never'  };
             let lo = 0, hi = balance;
@@ -294,10 +293,10 @@
         }
 
         function updateStaticParams() {
-            const balance = parseFloat(document.getElementById('balance').value) || 0;
-            const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
+            const balance    = parseFloat(document.getElementById('balance').value)    || 0;
+            const lowThresh  = parseFloat(document.getElementById('lowThresh').value)  || 29385;
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
-            const cap = parseFloat(document.getElementById('cap').value) || 6;
+            const cap        = parseFloat(document.getElementById('cap').value)        || 6;
             cachedYearsRemaining = getYearsRemaining();
             document.getElementById('yearsRemainingDisplay').textContent = cachedYearsRemaining;
             let calculatedMax = Math.ceil(((balance / 3) / 0.09 + lowThresh) / 10000) * 10000;
@@ -362,8 +361,8 @@
             const ctx = document.getElementById('chart').getContext('2d');
             if (!chart) {
                 chart = new Chart(ctx, { type: 'line', data: { labels: chartLabels, datasets: [
-                    { label: 'Total Paid',    data: totalPaid, borderColor: '#36A2EB', backgroundColor: 'rgba(54,162,235,0.1)', yAxisID: 'y-paid', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
-                    { label: 'Years to Repay', data: years,   borderColor: '#FF6384', borderDash: [5,5], yAxisID: 'y-term', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                    { label: 'Total Paid',     data: totalPaid, borderColor: '#36A2EB', backgroundColor: 'rgba(54,162,235,0.1)', yAxisID: 'y-paid', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Years to Repay', data: years,     borderColor: '#FF6384', borderDash: [5,5], yAxisID: 'y-term', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
                 ]}, options: { responsive: true, maintainAspectRatio: false,
                     scales: { x: { title: { display: true, text: 'Initial Annual Salary (£)' }, ticks: { maxTicksLimit: 15 } }, 'y-paid': { type: 'linear', position: 'left', title: { display: true, text: 'Total Paid (£)' }, beginAtZero: true, max: cachedYAxisMax }, 'y-term': { type: 'linear', position: 'right', title: { display: true, text: 'Years Remaining' }, beginAtZero: true, max: maxYears, grid: { drawOnChartArea: false } } },
                     plugins: { annotation: { annotations }, tooltip: { callbacks: { label(context) { let l = context.dataset.label + ': '; return context.datasetIndex === 0 ? l + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y) : l + context.parsed.y.toFixed(1) + ' yrs'; } } } },
@@ -421,10 +420,9 @@
             document.getElementById('opNpvOpSub').textContent   = `Nominal: ${fmt(full.totalPaid)} over ${full.years.toFixed(1)} yrs${full.writtenOff > 0 ? ` — ${fmt(full.writtenOff)} written off` : ''}`;
             document.getElementById('opNpvSaving').textContent    = fmt(npvSaving);
             document.getElementById('opNpvSavingSub').textContent = npvSaving > 0
-                ? `Full scenario saves ${fmt(npvSaving)} in today's money vs doing nothing`
+                ? `Full scenario saves ${fmt(npvSaving)} in today’s money vs doing nothing`
                 : `Doing nothing + investing at ${(discountRate*100).toFixed(1)}% beats full scenario by ${fmt(Math.abs(npvSaving))}`;
 
-            // Inflection bisects against sacOnly — marginal value of lump sum given sacrifice is fixed
             const inflection = findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, npvSacOnly);
             const inflEl  = document.getElementById('opInflection');
             const inflSub = document.getElementById('opInflectionSub');
@@ -447,50 +445,60 @@
                 setVerdict('good', `Overpay up to ${fmt(inflection.lump)}`, `At this salary, lump sum repayments up to ${fmt(inflection.lump)} beat investing at ${(discountRate*100).toFixed(1)}%. Beyond that threshold, invest the remainder — the marginal return on further repayment falls below your discount rate.`);
             }
 
-            const baseBalances = buildBalanceCurve(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
-            const sacBalances  = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
-            const fullBalances = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
-            const maxLen = Math.max(baseBalances.length, sacBalances.length, fullBalances.length);
+            // Cumulative repayment curves (lump sum applied at month 0)
+            const baseCurve = buildCumulativeCurve(balance, salary,          lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const sacCurve  = buildCumulativeCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0,            0);
+            const fullCurve = buildCumulativeCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
+            const maxLen = Math.max(baseCurve.length, sacCurve.length, fullCurve.length);
+            // Extend flat lines to match length (curves freeze at final value once loan ends / is written off)
+            const extend = (arr) => { const last = arr[arr.length - 1]; while (arr.length < maxLen) arr.push(last); return arr; };
+            extend(baseCurve); extend(sacCurve); extend(fullCurve);
             const labels = Array.from({length: maxLen}, (_, i) => (i % 12 === 0) ? `Yr ${Math.floor(i/12)}` : '');
 
             const ctxOP = document.getElementById('chartOP').getContext('2d');
             if (!chartOP) {
                 chartOP = new Chart(ctxOP, { type: 'line', data: { labels, datasets: [
-                    { label: 'Baseline',                 data: baseBalances, borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
-                    { label: 'Salary Sacrifice',         data: sacBalances,  borderColor: '#FFC107', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2, borderDash: [5,3] },
-                    { label: 'Sacrifice + Overpayments', data: fullBalances, borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                    { label: 'Baseline',                 data: baseCurve, borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Salary Sacrifice',         data: sacCurve,  borderColor: '#FFC107', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2, borderDash: [5,3] },
+                    { label: 'Sacrifice + Overpayments', data: fullCurve, borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
                 ]}, options: { responsive: true, maintainAspectRatio: false,
-                    scales: { x: { title: { display: true, text: 'Year' }, ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: 'Outstanding Balance (£)' }, beginAtZero: true } },
+                    scales: {
+                        x: { title: { display: true, text: 'Year' }, ticks: { maxTicksLimit: 20 } },
+                        y: { title: { display: true, text: 'Cumulative Repayment (£)' }, beginAtZero: true }
+                    },
                     plugins: { tooltip: { callbacks: { label(context) { return context.dataset.label + ': ' + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y); } } } },
                     interaction: { mode: 'index', intersect: false }, animation: false } });
             } else {
                 chartOP.data.labels = labels;
-                chartOP.data.datasets[0].data = baseBalances;
-                chartOP.data.datasets[1].data = sacBalances;
-                chartOP.data.datasets[2].data = fullBalances;
+                chartOP.data.datasets[0].data = baseCurve;
+                chartOP.data.datasets[1].data = sacCurve;
+                chartOP.data.datasets[2].data = fullCurve;
                 chartOP.update('none');
             }
         }
 
-        function buildBalanceCurve(balance, initSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum) {
+        // Returns monthly cumulative repayment. Lump sum counts as month-0 payment.
+        function buildCumulativeCurve(balance, initSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum) {
             let currentBalance = Math.max(0, balance - lumpSum);
+            let cumPaid = Math.min(lumpSum, balance);
             let sal = initSalary, lt = lowThresh, ht = highThresh;
-            const balances = [currentBalance];
+            const curve = [cumPaid];  // month 0 = lump sum (or 0)
             for (let y = 0; y < maxYears; y++) {
                 if (currentBalance <= 0) break;
-                const annualRate   = getInterestRate(rpi, sal, lt, ht, cap);
-                const monthlyRate  = annualRate / 12;
+                const annualRate  = getInterestRate(rpi, sal, lt, ht, cap);
+                const monthlyRate = annualRate / 12;
                 const monthlyRepayment = Math.max(0, (sal - lt) * 0.09) / 12;
                 for (let m = 0; m < 12; m++) {
                     if (currentBalance <= 0) break;
                     const interest = currentBalance * monthlyRate;
                     const actualRepayment = Math.min(currentBalance + interest, monthlyRepayment + extraMonthly);
                     currentBalance = Math.max(0, currentBalance + interest - actualRepayment);
-                    balances.push(currentBalance);
+                    cumPaid += actualRepayment;
+                    curve.push(cumPaid);
                 }
                 sal *= (1 + growth); lt *= (1 + threshGrowth); ht *= (1 + threshGrowth);
             }
-            return balances;
+            return curve;
         }
 
         updateSliders();
