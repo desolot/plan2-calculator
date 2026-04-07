@@ -38,6 +38,7 @@
         @media (max-width: 900px) { .results-grid { grid-template-columns: 1fr; } }
         .chart-container { position: relative; height: 500px; width: 100%; background: #fff; padding: 15px; border: 1px solid #e9ecef; border-radius: 6px; box-sizing: border-box; }
         .table-container { border: 1px solid #e9ecef; border-radius: 6px; overflow-x: auto; background: #fff; }
+        .test-sal-label { display: flex; flex-direction: column; font-size: 0.9em; font-weight: bold; margin-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
         th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background-color: #f8f9fa; font-weight: bold; }
@@ -62,9 +63,6 @@
             Loan Start Year
             <input type="number" id="startYear" value="2020" min="2012" max="2026" onchange="updateStaticParams()">
             <span class="years-remaining">Years remaining: <span id="yearsRemainingDisplay">?</span></span>
-        </label>
-        <label style="grid-column: span 2;">Test Salaries (£, CSV)
-            <input type="text" id="testSalaries" value="30000, 45000, 60000, 80000" onchange="requestRender()">
         </label>
     </div>
 
@@ -109,11 +107,16 @@
 
     <div class="results-grid">
         <div class="chart-container"><canvas id="chart"></canvas></div>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>Salary</th><th>Init Rate</th><th>Total Paid</th><th>Written Off</th></tr></thead>
-                <tbody id="tableBody"></tbody>
-            </table>
+        <div>
+            <label class="test-sal-label">Test Salaries (£, CSV)
+                <input type="text" id="testSalaries" value="30000, 45000, 60000, 80000" onchange="requestRender()">
+            </label>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Salary</th><th>Init Rate</th><th>Total Paid</th><th>Written Off</th></tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -246,28 +249,17 @@
             return cashflows.reduce((acc, cf, i) => acc + cf / Math.pow(1 + monthlyRate, i + 1), 0);
         }
 
-        // NPV saving as a function of lump sum (holding all other params fixed)
-        // npvSaving = npv(base cashflows) - (lumpSum + npv(op cashflows))
-        // The lumpSum itself is an immediate outflow at t=0, so its PV = lumpSum
         function npvSavingForLump(lump, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv) {
             const op = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lump);
             const opNpvTotal = lump + npv(op.cashflows, discountRate);
             return baseNpv - opNpvTotal;
         }
 
-        // Binary search for the lump sum where npvSaving crosses zero
         function findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv) {
-            // At lump=0 the saving is 0 by definition of baseline, so we want the FIRST point where it flips negative
-            // Actually saving(0) may be nonzero if extraMonthly > 0; we search [0, balance]
             const savingAt0 = npvSavingForLump(0, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv);
             const savingAtMax = npvSavingForLump(balance, balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, baseNpv);
-
-            // If saving is always positive (repaying always beats investing) — inflection is at balance (full repayment)
             if (savingAtMax >= 0) return { lump: balance, verdict: 'always' };
-            // If saving is always negative (investing always beats repaying) — inflection does not exist in range
             if (savingAt0 <= 0) return { lump: null, verdict: 'never' };
-
-            // Bisect: find where saving crosses zero from positive to negative
             let lo = 0, hi = balance;
             for (let i = 0; i < 40; i++) {
                 const mid = (lo + hi) / 2;
@@ -390,7 +382,6 @@
                 ? `Overpaying saves ${fmt(npvSaving)} in today’s money vs investing at ${(discountRate*100).toFixed(1)}%`
                 : `Investing at ${(discountRate*100).toFixed(1)}% beats overpaying by ${fmt(Math.abs(npvSaving))}`;
 
-            // Lump sum inflection: binary search for lump where npvSaving = 0
             const inflection = findInflectionLump(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, discountRate, npvBase);
             const inflEl = document.getElementById('opInflection');
             const inflSub = document.getElementById('opInflectionSub');
