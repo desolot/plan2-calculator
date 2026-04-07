@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; color: #333; }
+        h2 { margin: 30px 0 15px; font-size: 1.2em; color: #333; border-bottom: 2px solid #e9ecef; padding-bottom: 8px; }
         .inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .inputs label { display: flex; flex-direction: column; font-size: 0.9em; font-weight: bold; }
         input[type="number"], input[type="text"] { padding: 8px; font-size: 1em; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
@@ -30,6 +31,8 @@
         .callout { flex: 1; min-width: 200px; padding: 15px; border-radius: 6px; border-left: 5px solid; background: #f8f9fa; }
         .callout.break-even { border-color: #20c997; }
         .callout.max-paid { border-color: #6f42c1; }
+        .callout.npv { border-color: #fd7e14; }
+        .callout.saving { border-color: #20c997; }
         .callout-title { font-size: 0.9em; text-transform: uppercase; color: #666; font-weight: bold; margin-bottom: 5px; }
         .callout-value { font-size: 1.4em; font-weight: bold; margin-bottom: 5px; }
         .callout-sub { font-size: 0.9em; color: #555; }
@@ -45,9 +48,18 @@
         th { background-color: #f8f9fa; font-weight: bold; }
         .row-thresh { background-color: #fcfcfc; color: #6c757d; font-style: italic; }
         .row-breakeven { background-color: #e8f5e9; font-weight: bold; color: #198754; }
+
+        .op-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; background: #f8f9fa; padding: 20px; border-radius: 6px; border: 1px solid #e9ecef; }
+        .op-inputs label { display: flex; flex-direction: column; font-size: 0.9em; font-weight: bold; }
+        .op-inputs .hint { font-size: 0.8em; color: #6c757d; margin-top: 3px; font-style: italic; font-weight: normal; }
+        .op-salary-label { font-size: 0.85em; color: #6c757d; margin-top: 4px; }
+        .op-salary-label span { font-weight: bold; color: #495057; }
+        .section-divider { border: none; border-top: 1px solid #e9ecef; margin: 30px 0; }
     </style>
 </head>
 <body>
+
+    <!-- ===== MAIN CALCULATOR ===== -->
     <div class="inputs">
         <label>Balance (£) <input type="number" id="balance" value="50000" onchange="updateStaticParams()"></label>
         <label>Low Thresh (£) <input type="number" id="lowThresh" value="29385" onchange="updateStaticParams()"></label>
@@ -58,7 +70,7 @@
             <input type="number" id="startYear" value="2020" min="2012" max="2026" onchange="updateStaticParams()">
             <span class="years-remaining">Years remaining: <span id="yearsRemainingDisplay">?</span></span>
         </label>
-        <label style="grid-column: span 2;">Test Salaries (£, CSV) 
+        <label style="grid-column: span 2;">Test Salaries (£, CSV)
             <input type="text" id="testSalaries" value="30000, 45000, 60000, 80000" onchange="requestRender()">
         </label>
     </div>
@@ -71,29 +83,21 @@
                 <div id="capIndLow" class="cap-indicator low">Cap Hits<br>(Low Sal)</div>
                 <input type="range" id="rpiSlider" min="0" max="8" step="0.1" value="3" oninput="updateSliders(); requestRender();">
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #666; margin-top: 5px;">
-                <span>0%</span><span>8%</span>
-            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #666; margin-top: 5px;"><span>0%</span><span>8%</span></div>
         </div>
-
         <div class="slider-control">
             <label>Salary Growth (%): <span class="slider-value" id="growthValue">2.0</span></label>
             <div class="slider-wrapper" style="padding-top: 15px;">
                 <input type="range" id="growthSlider" min="0" max="10" step="0.1" value="2" oninput="updateSliders(); requestRender();">
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #666; margin-top: 5px;">
-                <span>0%</span><span>10%</span>
-            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #666; margin-top: 5px;"><span>0%</span><span>10%</span></div>
         </div>
-
         <div class="slider-control">
             <label>Threshold Growth (%): <span class="slider-value" id="threshGrowthValue">2.0</span></label>
             <div class="slider-wrapper" style="padding-top: 15px;">
                 <input type="range" id="threshGrowthSlider" min="0" max="10" step="0.1" value="2" oninput="updateSliders(); requestRender();">
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #666; margin-top: 5px;">
-                <span>0%</span><span>10%</span>
-            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #666; margin-top: 5px;"><span>0%</span><span>10%</span></div>
         </div>
     </div>
 
@@ -111,79 +115,101 @@
     </div>
 
     <div class="results-grid">
-        <div class="chart-container">
-            <canvas id="chart"></canvas>
-        </div>
+        <div class="chart-container"><canvas id="chart"></canvas></div>
         <div class="table-container">
             <table>
-                <thead>
-                    <tr>
-                        <th>Salary</th>
-                        <th>Init Rate</th>
-                        <th>Total Paid</th>
-                        <th>Written Off</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Salary</th><th>Init Rate</th><th>Total Paid</th><th>Written Off</th></tr></thead>
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
     </div>
 
-    <script>
-        let chart; 
-        let currentRPI = 0.03;
-        let currentGrowth = 0.02;
-        let currentThreshGrowth = 0.02;
-        
-        let cachedYAxisMax = 10000;
-        let cachedMaxSalaryPlot = 200000;
-        let cachedYearsRemaining = 30;
-        let renderFrameId = null;
+    <!-- ===== OVERPAYMENT EXPLORER ===== -->
+    <hr class="section-divider">
+    <h2>Overpayment Explorer</h2>
 
+    <div class="op-inputs">
+        <label>
+            Salary (£)
+            <input type="number" id="opSalary" value="45000" onchange="calculateOP()">
+            <span class="op-salary-label">Effective after sacrifice: <span id="opEffectiveSalary">-</span></span>
+        </label>
+        <label>
+            Salary Sacrifice (£/yr)
+            <input type="number" id="opSacrifice" value="0" min="0" onchange="calculateOP()">
+            <span class="hint">e.g. pension, cycle-to-work. Reduces assessment basis.</span>
+        </label>
+        <label>
+            Monthly Overpayment (£)
+            <input type="number" id="opMonthly" value="0" min="0" onchange="calculateOP()">
+            <span class="hint">Recurring extra capital repayment each month.</span>
+        </label>
+        <label>
+            Lump Sum (£)
+            <input type="number" id="opLump" value="0" min="0" onchange="calculateOP()">
+            <span class="hint">One-off upfront capital injection today.</span>
+        </label>
+        <label>
+            Discount Rate / Market Return (%)
+            <input type="number" id="opDiscount" value="7" step="0.1" min="0" onchange="calculateOP()">
+            <span class="hint">Used to compute NPV of repayments vs. investing that cash.</span>
+        </label>
+    </div>
+
+    <div class="callouts">
+        <div class="callout npv">
+            <div class="callout-title">NPV of Repayments (Baseline)</div>
+            <div class="callout-value" id="opNpvBase">£-</div>
+            <div class="callout-sub" id="opNpvBaseSub">No overpayments</div>
+        </div>
+        <div class="callout npv">
+            <div class="callout-title">NPV of Repayments (With Overpayments)</div>
+            <div class="callout-value" id="opNpvOp">£-</div>
+            <div class="callout-sub" id="opNpvOpSub">Including sacrifice + overpayments</div>
+        </div>
+        <div class="callout saving">
+            <div class="callout-title">NPV Saving</div>
+            <div class="callout-value" id="opNpvSaving">£-</div>
+            <div class="callout-sub" id="opNpvSavingSub">Positive = overpaying is worth it at this discount rate</div>
+        </div>
+    </div>
+
+    <div class="chart-container" style="margin-bottom: 20px;">
+        <canvas id="chartOP"></canvas>
+    </div>
+
+    <script>
+        let chart, chartOP;
+        let currentRPI = 0.03, currentGrowth = 0.02, currentThreshGrowth = 0.02;
+        let cachedYAxisMax = 10000, cachedMaxSalaryPlot = 200000, cachedYearsRemaining = 30;
+        let renderFrameId = null;
         const STATUTORY_TERM = 30;
         const CURRENT_YEAR = new Date().getFullYear();
 
         function getYearsRemaining() {
             const startYear = parseInt(document.getElementById('startYear').value) || CURRENT_YEAR;
-            const elapsed = CURRENT_YEAR - startYear;
-            return Math.max(1, Math.min(STATUTORY_TERM, STATUTORY_TERM - elapsed));
+            return Math.max(1, Math.min(STATUTORY_TERM, STATUTORY_TERM - (CURRENT_YEAR - startYear)));
         }
 
         function updateSliders() {
-            const rpiSlider = document.getElementById('rpiSlider');
-            const growthSlider = document.getElementById('growthSlider');
-            const threshGrowthSlider = document.getElementById('threshGrowthSlider');
-            
-            currentRPI = parseFloat(rpiSlider.value) / 100;
-            currentGrowth = parseFloat(growthSlider.value) / 100;
-            currentThreshGrowth = parseFloat(threshGrowthSlider.value) / 100;
-            
-            document.getElementById('rpiValue').textContent = rpiSlider.value;
-            document.getElementById('growthValue').textContent = growthSlider.value;
-            document.getElementById('threshGrowthValue').textContent = threshGrowthSlider.value;
+            currentRPI = parseFloat(document.getElementById('rpiSlider').value) / 100;
+            currentGrowth = parseFloat(document.getElementById('growthSlider').value) / 100;
+            currentThreshGrowth = parseFloat(document.getElementById('threshGrowthSlider').value) / 100;
+            document.getElementById('rpiValue').textContent = document.getElementById('rpiSlider').value;
+            document.getElementById('growthValue').textContent = document.getElementById('growthSlider').value;
+            document.getElementById('threshGrowthValue').textContent = document.getElementById('threshGrowthSlider').value;
         }
 
         function updateCapIndicator() {
             const cap = parseFloat(document.getElementById('cap').value);
             const slider = document.getElementById('rpiSlider');
-            const max = parseFloat(slider.max);
-            const min = parseFloat(slider.min);
-            
-            const capRpiHigh = cap - 3;
-            const capRpiLow = cap;
+            const max = parseFloat(slider.max), min = parseFloat(slider.min);
             const getPercent = (val) => Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
-
             const indHigh = document.getElementById('capIndHigh');
-            if (capRpiHigh >= min && capRpiHigh <= max) {
-                indHigh.style.left = `${getPercent(capRpiHigh)}%`;
-                indHigh.style.display = 'block';
-            } else { indHigh.style.display = 'none'; }
-
+            const capHigh = cap - 3;
+            if (capHigh >= min && capHigh <= max) { indHigh.style.left = `${getPercent(capHigh)}%`; indHigh.style.display = 'block'; } else { indHigh.style.display = 'none'; }
             const indLow = document.getElementById('capIndLow');
-            if (capRpiLow >= min && capRpiLow <= max) {
-                indLow.style.left = `${getPercent(capRpiLow)}%`;
-                indLow.style.display = 'block';
-            } else { indLow.style.display = 'none'; }
+            if (cap >= min && cap <= max) { indLow.style.left = `${getPercent(cap)}%`; indLow.style.display = 'block'; } else { indLow.style.display = 'none'; }
         }
 
         function getInterestRate(rpi, salary, lowThresh, highThresh, cap) {
@@ -193,43 +219,40 @@
             return Math.min(rpi + 0.03 * ((salary - lowThresh) / (highThresh - lowThresh)), capRate);
         }
 
-        function simulateMonthly(balance, initSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears) {
-            let currentBalance = balance;
-            let totalPaid = 0;
+        // Core simulation - supports extra monthly + lump sum overpayments and returns month-by-month cashflow
+        function simulateMonthly(balance, initSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly = 0, lumpSum = 0) {
+            let currentBalance = Math.max(0, balance - lumpSum);
+            let totalPaid = lumpSum > 0 ? Math.min(lumpSum, balance) : 0;
             let months = 0;
-            
-            let sal = initSalary;
-            let lt = lowThresh;
-            let ht = highThresh;
+            let sal = initSalary, lt = lowThresh, ht = highThresh;
+            const cashflows = [];
 
             for (let y = 0; y < maxYears; y++) {
                 if (currentBalance <= 0) break;
-
                 const annualRate = getInterestRate(rpi, sal, lt, ht, cap);
                 const monthlyRate = annualRate / 12;
                 const monthlyRepayment = Math.max(0, (sal - lt) * 0.09) / 12;
 
                 for (let m = 0; m < 12; m++) {
                     if (currentBalance <= 0) break;
-                    
                     const interest = currentBalance * monthlyRate;
-                    let actualRepayment = monthlyRepayment;
-
-                    if (currentBalance + interest < monthlyRepayment) {
-                        actualRepayment = currentBalance + interest;
-                    }
-
+                    let actualRepayment = Math.min(currentBalance + interest, monthlyRepayment + extraMonthly);
                     currentBalance = currentBalance + interest - actualRepayment;
                     totalPaid += actualRepayment;
+                    cashflows.push(actualRepayment);
                     months++;
                 }
-
                 sal *= (1 + growth);
                 lt *= (1 + threshGrowth);
                 ht *= (1 + threshGrowth);
             }
-            
-            return { totalPaid, years: months / 12, writtenOff: currentBalance > 0 ? currentBalance : 0 };
+            return { totalPaid, years: months / 12, writtenOff: currentBalance > 0 ? currentBalance : 0, cashflows };
+        }
+
+        // NPV of a cashflow array discounted at annual rate r
+        function npv(cashflows, annualRate) {
+            const monthlyRate = annualRate / 12;
+            return cashflows.reduce((acc, cf, i) => acc + cf / Math.pow(1 + monthlyRate, i + 1), 0);
         }
 
         function updateStaticParams() {
@@ -237,34 +260,29 @@
             const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
             const cap = parseFloat(document.getElementById('cap').value) || 6;
-
             cachedYearsRemaining = getYearsRemaining();
             document.getElementById('yearsRemainingDisplay').textContent = cachedYearsRemaining;
-
             let calculatedMax = Math.ceil(((balance / 3) / 0.09 + lowThresh) / 10000) * 10000;
-            cachedMaxSalaryPlot = Math.max(80000, Math.min(600000, calculatedMax)); 
-
+            cachedMaxSalaryPlot = Math.max(80000, Math.min(600000, calculatedMax));
             const maxSliderRpi = parseFloat(document.getElementById('rpiSlider').max) / 100;
             const maxSliderGrowth = parseFloat(document.getElementById('growthSlider').max) / 100;
             const minSliderThresh = parseFloat(document.getElementById('threshGrowthSlider').min) / 100;
-            
             let globalMaxPaid = 0;
-            for (let g of [0, maxSliderGrowth]) {
-                for (let i = 0; i <= cachedMaxSalaryPlot; i += 5000) { 
+            for (let g of [0, maxSliderGrowth])
+                for (let i = 0; i <= cachedMaxSalaryPlot; i += 5000) {
                     const res = simulateMonthly(balance, i, lowThresh, highThresh, maxSliderRpi, g, minSliderThresh, cap, cachedYearsRemaining);
                     if (res.totalPaid > globalMaxPaid) globalMaxPaid = res.totalPaid;
                 }
-            }
             cachedYAxisMax = Math.max(10000, Math.ceil(globalMaxPaid / 10000) * 10000);
-
             requestRender();
         }
 
         function requestRender() {
             if (renderFrameId) cancelAnimationFrame(renderFrameId);
-            renderFrameId = requestAnimationFrame(calculate);
+            renderFrameId = requestAnimationFrame(() => { calculate(); calculateOP(); });
         }
 
+        // ---- Main chart calculate ----
         function calculate() {
             updateCapIndicator();
             const balance = parseFloat(document.getElementById('balance').value) || 0;
@@ -272,144 +290,148 @@
             const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
             const cap = parseFloat(document.getElementById('cap').value) || 6;
             const maxYears = cachedYearsRemaining;
-            
-            const rpi = currentRPI;
-            const growth = currentGrowth;
-            const threshGrowth = currentThreshGrowth;
+            const rpi = currentRPI, growth = currentGrowth, threshGrowth = currentThreshGrowth;
+            const stepSize = Math.max(250, Math.floor(cachedMaxSalaryPlot / 300));
+            const salaries = Array.from({length: Math.floor(cachedMaxSalaryPlot / stepSize) + 1}, (_, i) => i * stepSize);
 
-            const stepSize = Math.max(250, Math.floor(cachedMaxSalaryPlot / 300)); 
-            const numSteps = Math.floor(cachedMaxSalaryPlot / stepSize);
-            const salaries = Array.from({length: numSteps + 1}, (_, i) => i * stepSize);
-
-            const totalPaid = [];
-            const years = [];
-            let maxPaidVal = -1;
-            let maxPaidSal = null;
-            let breakEvenSal = null;
-            let breakEvenPaid = null;
+            const totalPaid = [], years = [];
+            let maxPaidVal = -1, maxPaidSal = null, breakEvenSal = null, breakEvenPaid = null;
 
             for (let i = 0; i < salaries.length; i++) {
                 const res = simulateMonthly(balance, salaries[i], lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears);
                 totalPaid.push(res.totalPaid);
                 years.push(res.years);
-                
-                if (res.totalPaid > maxPaidVal) {
-                    maxPaidVal = res.totalPaid;
-                    maxPaidSal = salaries[i];
-                }
-                if (breakEvenSal === null && res.years < maxYears) {
-                    breakEvenSal = salaries[i];
-                    breakEvenPaid = res.totalPaid;
-                }
+                if (res.totalPaid > maxPaidVal) { maxPaidVal = res.totalPaid; maxPaidSal = salaries[i]; }
+                if (breakEvenSal === null && res.years < maxYears) { breakEvenSal = salaries[i]; breakEvenPaid = res.totalPaid; }
             }
 
-            const testSalsStr = document.getElementById('testSalaries').value;
-            const testSals = testSalsStr.split(',').map(s => parseFloat(s.trim())).filter(s => !isNaN(s));
-            let tableEntries = [];
-            
-            testSals.forEach(sal => { tableEntries.push({ label: `£${sal.toLocaleString()}`, val: sal, class: '' }); });
+            const testSals = document.getElementById('testSalaries').value.split(',').map(s => parseFloat(s.trim())).filter(s => !isNaN(s));
+            let tableEntries = testSals.map(sal => ({ label: `£${sal.toLocaleString()}`, val: sal, class: '' }));
             tableEntries.push({ label: `£${lowThresh.toLocaleString()} (Low Thresh)`, val: lowThresh, class: 'row-thresh' });
             tableEntries.push({ label: `£${highThresh.toLocaleString()} (High Thresh)`, val: highThresh, class: 'row-thresh' });
-            
-            if (breakEvenSal !== null) {
-                tableEntries.push({ label: `£${breakEvenSal.toLocaleString()} (Break-even)`, val: breakEvenSal, class: 'row-breakeven' });
-            }
-
+            if (breakEvenSal !== null) tableEntries.push({ label: `£${breakEvenSal.toLocaleString()} (Break-even)`, val: breakEvenSal, class: 'row-breakeven' });
             tableEntries.sort((a, b) => a.val - b.val);
 
-            let tbody = '';
-            tableEntries.forEach(entry => {
+            document.getElementById('tableBody').innerHTML = tableEntries.map(entry => {
                 const initRate = getInterestRate(rpi, entry.val, lowThresh, highThresh, cap) * 100;
                 const res = simulateMonthly(balance, entry.val, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears);
-                const writtenOffDisplay = res.writtenOff > 0 ? `£${Math.round(res.writtenOff).toLocaleString()}` : "£0";
-                
-                tbody += `<tr class="${entry.class}">
-                    <td>${entry.label}</td>
-                    <td>${initRate.toFixed(2)}%</td>
-                    <td>£${Math.round(res.totalPaid).toLocaleString()}</td>
-                    <td>${writtenOffDisplay}</td>
-                </tr>`;
-            });
-            document.getElementById('tableBody').innerHTML = tbody;
+                return `<tr class="${entry.class}"><td>${entry.label}</td><td>${initRate.toFixed(2)}%</td><td>£${Math.round(res.totalPaid).toLocaleString()}</td><td>${res.writtenOff > 0 ? `£${Math.round(res.writtenOff).toLocaleString()}` : '£0'}</td></tr>`;
+            }).join('');
 
             const isSamePoint = breakEvenSal !== null && Math.abs(maxPaidSal - breakEvenSal) <= stepSize * 2;
             document.getElementById('cbValue').textContent = breakEvenSal !== null ? `£${breakEvenSal.toLocaleString()}` : 'N/A';
             document.getElementById('cbSub').textContent = breakEvenSal !== null ? `Total Paid: £${Math.round(breakEvenPaid).toLocaleString()}` : `Does not break even within ${maxYears} yrs`;
-            
             const maxPaidCallout = document.getElementById('cmCallout');
-            if (isSamePoint) {
-                maxPaidCallout.style.display = 'none';
-            } else {
-                maxPaidCallout.style.display = 'block';
-                document.getElementById('cmValue').textContent = `£${Math.round(maxPaidVal).toLocaleString()}`;
-                document.getElementById('cmSub').textContent = `At starting salary £${maxPaidSal.toLocaleString()}`;
-            }
+            if (isSamePoint) { maxPaidCallout.style.display = 'none'; }
+            else { maxPaidCallout.style.display = 'block'; document.getElementById('cmValue').textContent = `£${Math.round(maxPaidVal).toLocaleString()}`; document.getElementById('cmSub').textContent = `At starting salary £${maxPaidSal.toLocaleString()}`; }
 
             const annotations = {};
-            if (breakEvenSal !== null) {
-                annotations.breakEven = {
-                    type: 'line', scaleID: 'x', value: `£${(breakEvenSal/1000).toFixed(1)}k`,
-                    borderColor: 'rgba(32, 201, 151, 0.8)', borderWidth: 2, borderDash: [5, 5],
-                    label: { display: true, content: 'Break-even', position: 'start', backgroundColor: 'rgba(32, 201, 151, 0.9)' }
-                };
-            }
-            if (maxPaidSal !== null && !isSamePoint) {
-                annotations.maxPaid = {
-                    type: 'line', scaleID: 'x', value: `£${(maxPaidSal/1000).toFixed(1)}k`,
-                    borderColor: 'rgba(111, 66, 193, 0.8)', borderWidth: 2, borderDash: [5, 5],
-                    label: { display: true, content: 'Max Repaid', position: 'center', backgroundColor: 'rgba(111, 66, 193, 0.9)' }
-                };
-            }
+            if (breakEvenSal !== null) annotations.breakEven = { type: 'line', scaleID: 'x', value: `£${(breakEvenSal/1000).toFixed(1)}k`, borderColor: 'rgba(32, 201, 151, 0.8)', borderWidth: 2, borderDash: [5,5], label: { display: true, content: 'Break-even', position: 'start', backgroundColor: 'rgba(32, 201, 151, 0.9)' } };
+            if (maxPaidSal !== null && !isSamePoint) annotations.maxPaid = { type: 'line', scaleID: 'x', value: `£${(maxPaidSal/1000).toFixed(1)}k`, borderColor: 'rgba(111, 66, 193, 0.8)', borderWidth: 2, borderDash: [5,5], label: { display: true, content: 'Max Repaid', position: 'center', backgroundColor: 'rgba(111, 66, 193, 0.9)' } };
 
             const chartLabels = salaries.map(s => `£${(s/1000).toFixed(1)}k`);
-
             const ctx = document.getElementById('chart').getContext('2d');
             if (!chart) {
-                chart = new Chart(ctx, {
-                    type: 'line',
-                    data: { 
-                        labels: chartLabels, 
-                        datasets: [
-                            { label: 'Total Paid', data: totalPaid, borderColor: '#36A2EB', backgroundColor: 'rgba(54, 162, 235, 0.1)', yAxisID: 'y-paid', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
-                            { label: 'Years to Repay', data: years, borderColor: '#FF6384', borderDash: [5, 5], yAxisID: 'y-term', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
-                        ]
-                    },
-                    options: {
-                        responsive: true, maintainAspectRatio: false,
-                        scales: {
-                            x: { title: { display: true, text: 'Initial Annual Salary (£)' }, ticks: { maxTicksLimit: 15 } },
-                            'y-paid': { type: 'linear', position: 'left', title: { display: true, text: 'Total Paid (£)' }, beginAtZero: true, max: cachedYAxisMax },
-                            'y-term': { type: 'linear', position: 'right', title: { display: true, text: 'Years Remaining' }, beginAtZero: true, max: maxYears, grid: { drawOnChartArea: false } }
-                        },
-                        plugins: { 
-                            annotation: { annotations },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        let label = context.dataset.label || '';
-                                        if (label) label += ': ';
-                                        if (context.datasetIndex === 0) label += new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(context.parsed.y);
-                                        else if (context.datasetIndex === 1) label += context.parsed.y.toFixed(1) + ' yrs';
-                                        return label;
-                                    }
-                                }
-                            }
-                        },
-                        interaction: { mode: 'index', intersect: false },
-                        animation: false
-                    }
-                });
+                chart = new Chart(ctx, { type: 'line', data: { labels: chartLabels, datasets: [
+                    { label: 'Total Paid', data: totalPaid, borderColor: '#36A2EB', backgroundColor: 'rgba(54,162,235,0.1)', yAxisID: 'y-paid', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Years to Repay', data: years, borderColor: '#FF6384', borderDash: [5,5], yAxisID: 'y-term', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                ]}, options: { responsive: true, maintainAspectRatio: false,
+                    scales: { x: { title: { display: true, text: 'Initial Annual Salary (£)' }, ticks: { maxTicksLimit: 15 } }, 'y-paid': { type: 'linear', position: 'left', title: { display: true, text: 'Total Paid (£)' }, beginAtZero: true, max: cachedYAxisMax }, 'y-term': { type: 'linear', position: 'right', title: { display: true, text: 'Years Remaining' }, beginAtZero: true, max: maxYears, grid: { drawOnChartArea: false } } },
+                    plugins: { annotation: { annotations }, tooltip: { callbacks: { label(context) { let l = context.dataset.label + ': '; return context.datasetIndex === 0 ? l + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y) : l + context.parsed.y.toFixed(1) + ' yrs'; } } } },
+                    interaction: { mode: 'index', intersect: false }, animation: false } });
             } else {
-                chart.data.labels = chartLabels;
-                chart.data.datasets[0].data = totalPaid;
-                chart.data.datasets[1].data = years;
-                chart.options.scales['y-paid'].max = cachedYAxisMax;
-                chart.options.scales['y-term'].max = maxYears;
-                chart.options.plugins.annotation.annotations = annotations;
-                chart.update('none');
+                chart.data.labels = chartLabels; chart.data.datasets[0].data = totalPaid; chart.data.datasets[1].data = years;
+                chart.options.scales['y-paid'].max = cachedYAxisMax; chart.options.scales['y-term'].max = maxYears;
+                chart.options.plugins.annotation.annotations = annotations; chart.update('none');
             }
         }
-        
+
+        // ---- Overpayment chart calculate ----
+        function calculateOP() {
+            const balance = parseFloat(document.getElementById('balance').value) || 0;
+            const lowThresh = parseFloat(document.getElementById('lowThresh').value) || 29385;
+            const highThresh = parseFloat(document.getElementById('highThresh').value) || 52885;
+            const cap = parseFloat(document.getElementById('cap').value) || 6;
+            const maxYears = cachedYearsRemaining;
+            const rpi = currentRPI, growth = currentGrowth, threshGrowth = currentThreshGrowth;
+
+            const salary = parseFloat(document.getElementById('opSalary').value) || 0;
+            const sacrifice = parseFloat(document.getElementById('opSacrifice').value) || 0;
+            const extraMonthly = parseFloat(document.getElementById('opMonthly').value) || 0;
+            const lumpSum = parseFloat(document.getElementById('opLump').value) || 0;
+            const discountRate = (parseFloat(document.getElementById('opDiscount').value) || 0) / 100;
+
+            const effectiveSalary = Math.max(0, salary - sacrifice);
+            document.getElementById('opEffectiveSalary').textContent = `£${Math.round(effectiveSalary).toLocaleString()}`;
+
+            // Baseline: no sacrifice, no overpayments
+            const base = simulateMonthly(balance, salary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0, 0);
+            // With scenario: sacrifice reduces assessment salary, plus overpayments
+            const op = simulateMonthly(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
+
+            const npvBase = npv(base.cashflows, discountRate);
+            const npvOp = npv(op.cashflows, discountRate);
+            const npvSaving = npvBase - npvOp;
+
+            const fmt = (v) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(v);
+
+            document.getElementById('opNpvBase').textContent = fmt(npvBase);
+            document.getElementById('opNpvBaseSub').textContent = `Nominal: ${fmt(base.totalPaid)} over ${base.years.toFixed(1)} yrs`;
+            document.getElementById('opNpvOp').textContent = fmt(npvOp);
+            document.getElementById('opNpvOpSub').textContent = `Nominal: ${fmt(op.totalPaid)} over ${op.years.toFixed(1)} yrs`;
+            document.getElementById('opNpvSaving').textContent = fmt(npvSaving);
+            document.getElementById('opNpvSavingSub').textContent = npvSaving > 0
+                ? `Overpaying saves ${fmt(npvSaving)} in today’s money vs investing at ${(discountRate*100).toFixed(1)}%`
+                : `Investing at ${(discountRate*100).toFixed(1)}% beats overpaying by ${fmt(Math.abs(npvSaving))}`;
+
+            // Build monthly balance curves for both scenarios
+            const baseBalances = buildBalanceCurve(balance, salary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, 0, 0);
+            const opBalances = buildBalanceCurve(balance, effectiveSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum);
+            const maxLen = Math.max(baseBalances.length, opBalances.length);
+            const labels = Array.from({length: maxLen}, (_, i) => {
+                const yr = Math.floor(i / 12);
+                const mo = i % 12;
+                return mo === 0 ? `Yr ${yr}` : '';
+            });
+
+            const ctxOP = document.getElementById('chartOP').getContext('2d');
+            if (!chartOP) {
+                chartOP = new Chart(ctxOP, { type: 'line', data: { labels, datasets: [
+                    { label: 'Balance (Baseline)', data: baseBalances, borderColor: '#FF6384', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 },
+                    { label: 'Balance (With Overpayments)', data: opBalances, borderColor: '#36A2EB', fill: false, pointRadius: 0, tension: 0.1, borderWidth: 2 }
+                ]}, options: { responsive: true, maintainAspectRatio: false,
+                    scales: { x: { title: { display: true, text: 'Month' }, ticks: { maxTicksLimit: 20 } }, y: { title: { display: true, text: 'Outstanding Balance (£)' }, beginAtZero: true } },
+                    plugins: { tooltip: { callbacks: { label(context) { return context.dataset.label + ': ' + new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(context.parsed.y); } } } },
+                    interaction: { mode: 'index', intersect: false }, animation: false } });
+            } else {
+                chartOP.data.labels = labels;
+                chartOP.data.datasets[0].data = baseBalances;
+                chartOP.data.datasets[1].data = opBalances;
+                chartOP.update('none');
+            }
+        }
+
+        function buildBalanceCurve(balance, initSalary, lowThresh, highThresh, rpi, growth, threshGrowth, cap, maxYears, extraMonthly, lumpSum) {
+            let currentBalance = Math.max(0, balance - lumpSum);
+            let sal = initSalary, lt = lowThresh, ht = highThresh;
+            const balances = [currentBalance];
+            for (let y = 0; y < maxYears; y++) {
+                if (currentBalance <= 0) break;
+                const annualRate = getInterestRate(rpi, sal, lt, ht, cap);
+                const monthlyRate = annualRate / 12;
+                const monthlyRepayment = Math.max(0, (sal - lt) * 0.09) / 12;
+                for (let m = 0; m < 12; m++) {
+                    if (currentBalance <= 0) break;
+                    const interest = currentBalance * monthlyRate;
+                    const actualRepayment = Math.min(currentBalance + interest, monthlyRepayment + extraMonthly);
+                    currentBalance = Math.max(0, currentBalance + interest - actualRepayment);
+                    balances.push(currentBalance);
+                }
+                sal *= (1 + growth); lt *= (1 + threshGrowth); ht *= (1 + threshGrowth);
+            }
+            return balances;
+        }
+
         updateSliders();
         updateStaticParams();
     </script>
